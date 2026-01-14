@@ -273,8 +273,8 @@ mcp:
 ### Session Discovery
 
 1. **VS Code Copilot**: Scans workspace directories and reads `workspace.json` files to match workspace paths
-2. **Cursor**: Uses workspace.json mapping (similar to VS Code)
-3. **Rovodev**: Reads workspace_path from metadata.json
+2. **Cursor**: Reads from global SQLite database (`state.vscdb`) containing Composer conversations
+3. **Rovodev**: Reads workspace_path from metadata.json in each session file
 
 ### Caching & Performance
 
