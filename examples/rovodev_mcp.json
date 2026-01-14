@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "ai-session-bridge": {
+      "comment": "Use pipx path for production, or venv path for development",
+      "command": "/Users/YOUR_USERNAME/.local/bin/ai-session-bridge",
+      "args": ["serve"]
+    }
+  }
+}

@@ -1,0 +1,56 @@
+# Example configuration for ai-session-bridge
+
+# Scope: which sessions to include
+scope:
+  # Options: "current_workspace", "all_workspaces", "specified"
+  mode: current_workspace
+
+  # Only used if mode is "specified"
+  workspaces:
+    - /path/to/project1
+    - /path/to/project2
+
+# Which tools to read from
+tools:
+  copilot: true
+  cursor: true
+  rovodev: true
+  continue: false  # Disabled by default
+
+# Cache settings
+cache:
+  enabled: true
+  directory: ~/.cache/ai-session-bridge
+  max_age_days: 30  # Remove cached sessions older than this
+
+# Search index
+search:
+  enabled: true
+  use_fts: true  # Use SQLite FTS5 for fast search
+
+# Security: filter sensitive content
+filtering:
+  enabled: true
+  patterns:
+    # API Keys
+    - "(?i)(api[_-]?key|apikey)[\"']?\\s*[:=]\\s*[\"']?[a-zA-Z0-9_-]{20,}"
+    # Generic secrets
+    - "(?i)(secret|password|passwd|pwd)[\"']?\\s*[:=]\\s*[\"']?[^\\s\"']{8,}"
+    # Bearer tokens
+    - "(?i)bearer\\s+[a-zA-Z0-9_-]{20,}"
+    # AWS credentials
+    - "(?i)(aws_access_key_id|aws_secret_access_key)\\s*=\\s*[A-Z0-9]{16,}"
+    # Private keys
+    - "-----BEGIN\\s+(?:RSA\\s+)?PRIVATE\\s+KEY-----[\\s\\S]*?-----END"
+    # GitHub tokens
+    - "gh[pousr]_[a-zA-Z0-9]{36,}"
+    # Slack tokens
+    - "xox[baprs]-[a-zA-Z0-9-]+"
+  replacement: "[REDACTED]"
+
+# MCP server settings
+mcp:
+  # Max messages to return in get_recent_context
+  max_context_messages: 50
+  # Max sessions to include in context
+  max_context_sessions: 5

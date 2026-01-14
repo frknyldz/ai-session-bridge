@@ -1,0 +1,23 @@
+# Pre-commit hooks for code quality
+# Install: pip install pre-commit && pre-commit install
+# Run manually: pre-commit run --all-files
+# Run specific hook: pre-commit run <hook-id> --all-files
+# Example: pre-commit run ruff --all-files
+
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.8.6
+    hooks:
+      - id: ruff           # Linting (id: ruff)
+        args: [--fix]
+      - id: ruff-format    # Code formatting (id: ruff-format)
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace      # Remove trailing whitespace
+      - id: end-of-file-fixer         # Ensure files end with newline
+      - id: check-yaml                # Validate YAML files
+      - id: check-added-large-files   # Prevent large files (>500KB)
+      - id: check-merge-conflict      # Check for merge conflict markers
+      - id: check-toml                # Validate TOML files
