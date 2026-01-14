@@ -15,8 +15,39 @@ from ai_session_bridge.server import (
 )
 
 
+@pytest.fixture
+def mocked_storage_dirs(monkeypatch, tmp_path):
+    """Mock storage directories for all tests."""
+    vscode_storage = tmp_path / "vscode_storage"
+    vscode_storage.mkdir()
+    cursor_storage = tmp_path / "cursor_storage"
+    cursor_storage.mkdir()
+    rovodev_storage = tmp_path / "rovodev_storage"
+    rovodev_storage.mkdir()
+
+    from ai_session_bridge import readers
+    from ai_session_bridge.readers import registry as registry_module
+
+    # Patch where the functions are USED (in registry), not where they're defined
+    monkeypatch.setattr(registry_module, "get_vscode_storage_dir", lambda: vscode_storage)
+    monkeypatch.setattr(registry_module, "get_cursor_storage_dir", lambda: cursor_storage)
+    monkeypatch.setattr(registry_module, "get_rovodev_sessions_dir", lambda: rovodev_storage)
+
+    # Reset the global registry to force re-initialization with mocked paths
+    readers.registry._registry = None
+
+    yield {
+        "vscode": vscode_storage,
+        "cursor": cursor_storage,
+        "rovodev": rovodev_storage,
+    }
+
+    # Reset registry after test
+    readers.registry._registry = None
+
+
 @pytest.fixture(autouse=True)
-def setup_server_globals():
+def setup_server_globals(mocked_storage_dirs):
     """Initialize server globals before each test."""
     server_module._config = load_config()
     server_module._registry = get_registry()
@@ -29,14 +60,15 @@ def setup_server_globals():
 
 
 @pytest.fixture
-def mock_workspace_for_mcp(tmp_path):
+def mock_workspace_for_mcp(tmp_path, mocked_storage_dirs):
     """Create a mock workspace for MCP testing."""
     workspace = tmp_path / "mcp-workspace"
     workspace.mkdir()
 
-    # Create Copilot session
-    storage = tmp_path / "storage" / "workspace-hash" / "chatSessions"
-    storage.mkdir(parents=True)
+    # Create Copilot session in the mocked vscode_storage directory
+    vscode_storage = mocked_storage_dirs["vscode"]
+    storage = vscode_storage / "workspace-hash" / "chatSessions"
+    storage.mkdir(parents=True, exist_ok=True)
 
     workspace_json = storage.parent / "workspace.json"
     workspace_json.write_text(json.dumps({"folder": str(workspace)}))
