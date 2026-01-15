@@ -47,6 +47,23 @@ AI Session Bridge is an MCP (Model Context Protocol) server and CLI that allows 
 - ⚡ **Performance**: Smart caching and indexing for instant access
 - 🎯 **Workspace-Aware**: Automatically matches sessions to your current workspace
 
+## Screenshots
+
+### List Sessions Across All Tools
+View all your AI conversations in a clean, organized table format:
+
+![List all workspaces](screenshots/list-all-workspaces.png)
+
+### Workspace-Aware Search
+Search respects your current workspace - find exactly what you need:
+
+![Search current workspace](screenshots/search-current-workspace.png)
+
+### Session Details
+View full conversation history with proper formatting:
+
+![Show session details](screenshots/show-session-details.png)
+
 ## Installation
 
 ### Production Use (Recommended)

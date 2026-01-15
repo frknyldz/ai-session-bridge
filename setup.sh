@@ -42,6 +42,20 @@ echo "📥 Installing ai-session-bridge with dependencies..."
 pip install -e ".[dev]" --quiet
 
 echo "✅ Package installed"
+
+# Optional: Install with pipx for global access
+if command -v pipx &> /dev/null; then
+    echo ""
+    echo "🌍 Installing globally with pipx..."
+    if pipx list | grep -q "ai-session-bridge"; then
+        echo "📦 Upgrading existing pipx installation..."
+        pipx install -e . --force --quiet
+    else
+        echo "📦 Installing fresh pipx installation..."
+        pipx install -e . --quiet
+    fi
+    echo "✅ Global installation updated"
+fi
 echo ""
 
 # Install pre-commit hooks

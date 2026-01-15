@@ -76,17 +76,38 @@ def get_platform_config_dir() -> Path:
 
 
 def get_vscode_storage_dir() -> Path:
-    """Get VS Code workspace storage directory."""
+    """Get VS Code workspace storage directory.
+
+    Can be overridden with VSCODE_STORAGE environment variable for testing/demo.
+    """
+    import os
+
+    if override := os.getenv("VSCODE_STORAGE"):
+        return Path(override)
     return get_platform_config_dir() / "Code" / "User" / "workspaceStorage"
 
 
 def get_cursor_storage_dir() -> Path:
-    """Get Cursor workspace storage directory."""
+    """Get Cursor workspace storage directory.
+
+    Can be overridden with CURSOR_STORAGE environment variable for testing/demo.
+    """
+    import os
+
+    if override := os.getenv("CURSOR_STORAGE"):
+        return Path(override)
     return get_platform_config_dir() / "Cursor" / "User" / "workspaceStorage"
 
 
 def get_rovodev_sessions_dir() -> Path:
-    """Get Rovodev sessions directory."""
+    """Get Rovodev sessions directory.
+
+    Can be overridden with ROVODEV_HOME environment variable for testing/demo.
+    """
+    import os
+
+    if override := os.getenv("ROVODEV_HOME"):
+        return Path(override) / ".rovodev" / "sessions"
     return Path.home() / ".rovodev" / "sessions"
 
 

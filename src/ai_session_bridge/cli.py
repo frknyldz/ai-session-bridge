@@ -8,7 +8,7 @@ from rich.console import Console
 from rich.table import Table
 
 from .cache import SearchIndex, SessionCache
-from .core import get_current_workspace, normalize_workspace_path
+from .core import get_current_workspace
 from .core.config import load_config
 from .core.filter import ContentFilter
 from .readers import get_registry
@@ -25,12 +25,6 @@ def main() -> None:
 
 @main.command(name="list")
 @click.option(
-    "--workspace",
-    "-w",
-    type=str,
-    help="Specify workspace path (overrides default current workspace)",
-)
-@click.option(
     "--tool",
     "-t",
     multiple=True,
@@ -46,22 +40,19 @@ def main() -> None:
 @click.option(
     "--all",
     "-a",
-    "show_all",
     is_flag=True,
-    help="Show sessions from all workspaces (overrides --workspace)",
+    help="Show sessions from all workspaces (default: current workspace only)",
 )
-def list_sessions(workspace: str | None, tool: tuple[str, ...], limit: int, show_all: bool) -> None:
+def list_sessions(tool: tuple[str, ...], limit: int, all: bool) -> None:
     """List AI sessions (default: current workspace only)."""
     config = load_config()
     registry = get_registry()
 
-    # Determine workspace
-    if workspace:
-        workspace_path = normalize_workspace_path(workspace)
-    elif not show_all:
-        workspace_path = get_current_workspace()
-    else:
+    # Determine workspace: current workspace unless --all is specified
+    if all:
         workspace_path = None
+    else:
+        workspace_path = get_current_workspace()
 
     if workspace_path:
         console.print(f"[bold]Sessions for:[/bold] {workspace_path}\n")
@@ -132,9 +123,9 @@ def list_sessions(workspace: str | None, tool: tuple[str, ...], limit: int, show
 @main.command()
 @click.argument("session_id")
 @click.option("--tool", "-t", required=True, help="Tool name (copilot, cursor, rovodev, etc.)")
-@click.option("--workspace", "-w", type=str, help="Workspace path")
 @click.option("--no-filter", is_flag=True, help="Disable content filtering")
-def show(session_id: str, tool: str, workspace: str | None, no_filter: bool) -> None:
+@click.option("--all", "-a", is_flag=True, help="Search across all workspaces (default: current workspace only)")
+def show(session_id: str, tool: str, no_filter: bool, all: bool) -> None:
     """Show details of a specific session."""
     config = load_config()
     registry = get_registry()
@@ -144,9 +135,9 @@ def show(session_id: str, tool: str, workspace: str | None, no_filter: bool) -> 
         console.print(f"[red]Error: Unknown tool '{tool}'[/red]")
         sys.exit(1)
 
-    # Determine workspace
-    if workspace:
-        workspace_path = normalize_workspace_path(workspace)
+    # Determine workspace: current workspace unless --all is specified
+    if all:
+        workspace_path = None
     else:
         workspace_path = get_current_workspace()
 
@@ -154,7 +145,12 @@ def show(session_id: str, tool: str, workspace: str | None, no_filter: bool) -> 
     try:
         session_file = reader.find_session_by_id(session_id, workspace_path)
         if not session_file:
-            console.print(f"[red]Error: Session '{session_id}' not found[/red]")
+            if all:
+                console.print(f"[red]Error: Session '{session_id}' not found in any workspace[/red]")
+            else:
+                console.print(
+                    f"[red]Error: Session '{session_id}' not found in current workspace (try --all to search all workspaces)[/red]"
+                )
             sys.exit(1)
 
         # Read session
@@ -193,16 +189,10 @@ def show(session_id: str, tool: str, workspace: str | None, no_filter: bool) -> 
 
 @main.command()
 @click.argument("query")
-@click.option(
-    "--workspace",
-    "-w",
-    type=str,
-    help="Specify workspace path (default: current workspace, use --all for all workspaces)",
-)
 @click.option("--tool", "-t", help="Filter by tool")
 @click.option("--limit", "-n", type=int, default=20, help="Maximum results")
-@click.option("--all", "-a", "show_all", is_flag=True, help="Search across all workspaces (overrides --workspace)")
-def search(query: str, workspace: str | None, tool: str | None, limit: int, show_all: bool) -> None:
+@click.option("--all", "-a", is_flag=True, help="Search across all workspaces (default: current workspace only)")
+def search(query: str, tool: str | None, limit: int, all: bool) -> None:
     """Search across all sessions for keywords (default: current workspace only)."""
     config = load_config()
 
@@ -210,11 +200,9 @@ def search(query: str, workspace: str | None, tool: str | None, limit: int, show
         console.print("[yellow]Search is disabled in config[/yellow]")
         sys.exit(1)
 
-    # Determine workspace
-    if show_all:
+    # Determine workspace: current workspace unless --all is specified
+    if all:
         workspace_path = None
-    elif workspace:
-        workspace_path = normalize_workspace_path(workspace)
     else:
         workspace_path = get_current_workspace()
 
@@ -230,20 +218,36 @@ def search(query: str, workspace: str | None, tool: str | None, limit: int, show
             summaries = reader.get_sessions(workspace_path)
             for summary in summaries:
                 # Read full session and check if indexing needed
-                session_file = Path(summary.file_path)
+                # Use the original file_path string, not converted to Path
+                # This handles special formats like "db_path#session_id" for Cursor
+                session_file_path = summary.file_path
 
                 # For simplicity, we'll just index all sessions
                 # A production implementation might track mtimes
                 try:
-                    # Pass workspace_path to preserve it in the session
-                    session = reader.read_session(session_file, workspace_path)
-                    search_index.index_session(session, session_file)
-                except TypeError:
-                    # Reader doesn't support workspace_path parameter
-                    session = reader.read_session(session_file)
-                    search_index.index_session(session, session_file)
-                except Exception:
-                    # Skip sessions that fail to parse
+                    # Handle special file path formats (like Cursor's "db_path#session_id")
+                    if "#" in session_file_path and tool_name == "cursor":
+                        # For Cursor sessions, keep the special string format
+                        # Cursor reader expects: Path object with the special format as string
+                        session_path_arg = Path(session_file_path)
+                    else:
+                        # For normal file paths
+                        session_path_arg = Path(session_file_path)
+
+                    # First try with workspace_path parameter
+                    try:
+                        session = reader.read_session(session_path_arg, workspace_path)
+                    except TypeError:
+                        # Reader doesn't support workspace_path parameter (RovodevReader)
+                        session = reader.read_session(session_path_arg)
+
+                    # Index the session - use session ID as unique key instead of file path
+                    index_key = Path(f"{tool_name}_{session.id}")
+                    search_index.index_session(session, index_key)
+                except Exception as e:
+                    # Skip sessions that fail to parse, but don't fail silently in demo
+                    if "/tmp/ai_session_bridge_demo/" in session_file_path:
+                        print(f"Debug: Failed to index {session_file_path}: {e}")
                     pass
         except Exception:
             # Continue with other readers
@@ -300,10 +304,10 @@ def search(query: str, workspace: str | None, tool: str | None, limit: int, show
 
 
 @main.command()
-@click.option("--workspace", "-w", type=str, help="Workspace path")
 @click.option("--format", "-f", type=click.Choice(["markdown", "json"]), default="markdown")
 @click.option("--output", "-o", type=str, help="Output file (default: stdout)")
-def export(workspace: str | None, format: str, output: str | None) -> None:
+@click.option("--all", "-a", is_flag=True, help="Export from all workspaces (default: current workspace only)")
+def export(format: str, output: str | None, all: bool) -> None:
     """Export sessions to a file."""
     console.print("[yellow]Export feature not yet implemented[/yellow]")
 

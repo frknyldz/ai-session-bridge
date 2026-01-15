@@ -80,21 +80,13 @@ class RovodevReader(SessionReader):
             return None
 
     def _workspace_matches(self, target_workspace: str, session_workspace: str) -> bool:
-        """Check if workspace paths match."""
-        # Normalize both paths
+        """Check if workspace paths match exactly."""
+        # Normalize both paths for exact comparison
         target = Path(target_workspace).resolve()
         session = Path(session_workspace).resolve()
 
-        # Check if target is under session workspace or vice versa
-        try:
-            target.relative_to(session)
-            return True
-        except ValueError:
-            try:
-                session.relative_to(target)
-                return True
-            except ValueError:
-                return False
+        # Only exact matches
+        return target == session
 
     def _read_session_summary(self, session_dir: Path, workspace_path: str) -> SessionSummary | None:
         """Read Rovodev session summary."""

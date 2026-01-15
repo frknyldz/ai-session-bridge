@@ -50,9 +50,28 @@ class CopilotReader(SessionReader):
                     continue
                 for session_file in workspace_dir.glob("*.json"):
                     try:
-                        # Extract workspace hash from path
-                        workspace_hash = workspace_dir.parent.name
-                        ws_path = f"workspace-{workspace_hash}"
+                        # Try to get real workspace path from workspace.json
+                        workspace_json = workspace_dir.parent / "workspace.json"
+                        if workspace_json.exists():
+                            try:
+                                import json
+                                from urllib.parse import unquote, urlparse
+
+                                with open(workspace_json) as f:
+                                    workspace_data = json.load(f)
+                                folder_uri = workspace_data.get("folder")
+                                if folder_uri:
+                                    parsed = urlparse(folder_uri)
+                                    if parsed.scheme == "file":
+                                        ws_path = unquote(parsed.path)
+                                    else:
+                                        ws_path = f"workspace-{workspace_dir.parent.name}"
+                                else:
+                                    ws_path = f"workspace-{workspace_dir.parent.name}"
+                            except Exception:
+                                ws_path = f"workspace-{workspace_dir.parent.name}"
+                        else:
+                            ws_path = f"workspace-{workspace_dir.parent.name}"
                         summary = self._read_session_summary(session_file, ws_path)
                         if summary:
                             summaries.append(summary)

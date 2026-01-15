@@ -46,8 +46,8 @@ class CursorReader(SessionReader):
                 state_db = workspace_dir / "state.vscdb"
                 if state_db.exists():
                     summaries.extend(self._get_sessions_from_workspace_db(state_db, workspace_path))
-        else:
-            # Get sessions from all workspaces
+        elif workspace_path is None:
+            # Only get sessions from all workspaces when explicitly requesting all (workspace_path=None)
             for state_db in self.storage_dir.glob("*/state.vscdb"):
                 ws_path = f"cursor-{state_db.parent.name}"
                 summaries.extend(self._get_sessions_from_workspace_db(state_db, ws_path))
@@ -192,8 +192,10 @@ class CursorReader(SessionReader):
                     created_at = datetime.fromtimestamp(data.get("createdAt", stat.st_ctime) / 1000)
                     last_updated = datetime.fromtimestamp(data.get("lastUpdatedAt", stat.st_mtime) / 1000)
 
-                    # For now, cursor composer sessions from global storage are not workspace-specific
-                    # They could be associated with any workspace
+                    # Skip global cursor composer sessions when workspace is specified
+                    # since they can't be associated with a specific workspace
+                    if workspace_path:
+                        continue
                     ws_path = "cursor-composer-global"
 
                     summaries.append(
@@ -246,7 +248,7 @@ class CursorReader(SessionReader):
         data = json.loads(row[0])
 
         # Parse messages and get title
-        title = data.get("name")  # Try to get title from chat data
+        title = data.get("customTitle") or data.get("name")  # Try customTitle first, then name
         messages = []
         for msg in data.get("messages", []):
             sender = msg.get("sender")

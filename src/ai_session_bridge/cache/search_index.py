@@ -83,7 +83,8 @@ class SearchIndex:
         """
         try:
             current_mtime = file_path.stat().st_mtime
-        except FileNotFoundError:
+        except (FileNotFoundError, OSError):
+            # For special paths or demo data, always re-index
             return False
 
         conn = sqlite3.connect(self.db_path)
@@ -133,7 +134,12 @@ class SearchIndex:
                 )
 
             # Update indexed_sessions metadata
-            file_mtime = file_path.stat().st_mtime
+            try:
+                file_mtime = file_path.stat().st_mtime
+            except (FileNotFoundError, OSError):
+                # Use current time if file doesn't exist (e.g., for demo data or special paths)
+                file_mtime = datetime.now().timestamp()
+
             conn.execute(
                 """
                 INSERT OR REPLACE INTO indexed_sessions
