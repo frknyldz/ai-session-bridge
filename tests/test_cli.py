@@ -66,20 +66,21 @@ def test_cli_list_no_workspace(cli_runner, tmp_path, monkeypatch):
 
 
 def test_cli_list_with_workspace(cli_runner, mock_workspace):
-    """Test list command with workspace."""
-    result = cli_runner.invoke(main, ["list", "--workspace", str(mock_workspace)])
+    """Test list command (current workspace)."""
+    # Since we removed --workspace, test current workspace behavior
+    result = cli_runner.invoke(main, ["list"])
     assert result.exit_code == 0
 
 
 def test_cli_list_limit(cli_runner, mock_workspace):
     """Test list command with limit."""
-    result = cli_runner.invoke(main, ["list", "--limit", "5", "--workspace", str(mock_workspace)])
+    result = cli_runner.invoke(main, ["list", "--limit", "5"])
     assert result.exit_code == 0
 
 
 def test_cli_list_tool_filter(cli_runner, mock_workspace):
     """Test list command with tool filter."""
-    result = cli_runner.invoke(main, ["list", "--tool", "copilot", "--workspace", str(mock_workspace)])
+    result = cli_runner.invoke(main, ["list", "--tool", "copilot"])
     assert result.exit_code == 0
 
 
@@ -87,7 +88,7 @@ def test_cli_show_invalid_session(cli_runner, mock_workspace):
     """Test show command with invalid session ID."""
     result = cli_runner.invoke(
         main,
-        ["show", "nonexistent-id", "--tool", "copilot", "--workspace", str(mock_workspace)],
+        ["show", "nonexistent-id", "--tool", "copilot"],
     )
     # Should handle gracefully
     assert result.exit_code != 0 or "not found" in result.output.lower() or "error" in result.output.lower()
@@ -98,7 +99,7 @@ def test_cli_search_no_results(cli_runner, mock_workspace):
     """Test search with no results."""
     result = cli_runner.invoke(
         main,
-        ["search", "nonexistent-query-xyz123", "--workspace", str(mock_workspace)],
+        ["search", "nonexistent-query-xyz123"],
     )
     assert result.exit_code == 0
 
@@ -107,7 +108,7 @@ def test_cli_search_with_limit(cli_runner, mock_workspace):
     """Test search with limit."""
     result = cli_runner.invoke(
         main,
-        ["search", "test", "--limit", "3", "--workspace", str(mock_workspace)],
+        ["search", "test", "--limit", "3"],
     )
     assert result.exit_code == 0
 
@@ -132,7 +133,7 @@ def test_cli_list_help(cli_runner):
     """Test list command help."""
     result = cli_runner.invoke(main, ["list", "--help"])
     assert result.exit_code == 0
-    assert "workspace" in result.output.lower()
+    assert "all" in result.output.lower()  # Check for --all flag instead of workspace
 
 
 def test_cli_search_help(cli_runner):
