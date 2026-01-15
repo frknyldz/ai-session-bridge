@@ -5,7 +5,7 @@ Cross-tool AI conversation history reader. Enables any AI coding agent to access
 [![Python](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Tests](https://github.com/frknyldz/ai-session-bridge/actions/workflows/test.yml/badge.svg)](https://github.com/frknyldz/ai-session-bridge/actions/workflows/test.yml)
-[![codecov](https://codecov.io/gh/frknyldz/ai-session-bridge/branch/main/graph/badge.svg)](https://codecov.io/gh/frknyldz/ai-session-bridge)
+[![codecov](https://codecov.io/gh/frknyldz/ai-session-bridge/graph/badge.svg)](https://codecov.io/gh/frknyldz/ai-session-bridge)
 
 ## Overview
 
