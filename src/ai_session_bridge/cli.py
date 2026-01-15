@@ -369,5 +369,13 @@ def config_show() -> None:
         console.print("  - rovodev")
 
 
+@main.command()
+def serve() -> None:
+    """Start the MCP server (STDIO mode)."""
+    from .server import run_server
+
+    run_server()
+
+
 if __name__ == "__main__":
     main()
