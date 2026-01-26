@@ -165,8 +165,11 @@ class RovodevReader(SessionReader):
         # Parse messages
         messages = []
         for msg_data in data.get("message_history", []):
-            # Rovodev uses "kind" field: "request" = user, "response" = assistant
-            msg_kind = msg_data.get("kind", "request")
+            # Support both formats:
+            # - New format: "kind" field with "request"/"response"
+            # - Old format: "role" field with "user"/"assistant"
+            msg_kind = msg_data.get("kind")
+            msg_role_str = msg_data.get("role")
 
             # Rovodev messages have a "parts" array containing the actual content
             parts = msg_data.get("parts", [])
@@ -190,12 +193,12 @@ class RovodevReader(SessionReader):
                 elif part_kind == "system-prompt":
                     # Skip system prompts in output - they're too verbose
                     pass
-                elif part_kind == "tool-call":
+                elif part_kind in ("tool-call", "tool_use"):
                     # Tool call representation - only show if we have a meaningful name
                     tool_name = part.get("tool_name", "") or part.get("name", "")
                     if tool_name and tool_name != "unknown":
                         content_parts.append(f"[Tool Call: {tool_name}]")
-                elif part_kind in ("tool-result", "tool-return"):
+                elif part_kind in ("tool-result", "tool-return", "tool_result"):
                     # Tool result representation - skip for cleaner output
                     pass
 
@@ -205,16 +208,25 @@ class RovodevReader(SessionReader):
             if not content or not content.strip():
                 continue
 
-            # Map kind to role
-            if msg_kind == "request":
+            # Determine role - support both formats
+            if msg_kind == "request" or msg_role_str == "user":
                 msg_role = MessageRole.USER
-            elif msg_kind == "response":
+            elif msg_kind == "response" or msg_role_str == "assistant":
                 msg_role = MessageRole.ASSISTANT
+            elif msg_role_str == "system":
+                msg_role = MessageRole.SYSTEM
             else:
+                # Default to user for unknown
                 msg_role = MessageRole.USER
 
-            # Get timestamp from parts or fallback to file timestamp
-            if latest_timestamp:
+            # Get timestamp from message or parts, fallback to file timestamp
+            msg_timestamp = msg_data.get("timestamp")
+            if msg_timestamp:
+                try:
+                    timestamp = datetime.fromisoformat(msg_timestamp.replace("Z", "+00:00"))
+                except (ValueError, AttributeError):
+                    timestamp = updated_at
+            elif latest_timestamp:
                 try:
                     timestamp = datetime.fromisoformat(latest_timestamp.replace("Z", "+00:00"))
                 except (ValueError, AttributeError):
