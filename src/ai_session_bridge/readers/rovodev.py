@@ -165,45 +165,58 @@ class RovodevReader(SessionReader):
         # Parse messages
         messages = []
         for msg_data in data.get("message_history", []):
-            role = msg_data.get("role", "user")
+            # Rovodev uses "kind" field: "request" = user, "response" = assistant
+            msg_kind = msg_data.get("kind", "request")
 
             # Rovodev messages have a "parts" array containing the actual content
             parts = msg_data.get("parts", [])
             content_parts = []
+            latest_timestamp = None
 
             for part in parts:
-                # Each part can have different types (text, tool-call, tool-result)
+                # Each part can have different types
                 part_kind = part.get("part_kind")
                 part_content = part.get("content", "")
 
-                if part_kind in ("text", "system-prompt"):
-                    content_parts.append(part_content)
+                # Track the latest timestamp from parts
+                part_timestamp = part.get("timestamp")
+                if part_timestamp:
+                    latest_timestamp = part_timestamp
+
+                if part_kind in ("text", "user-prompt", "retry-prompt"):
+                    # Only add non-empty content
+                    if part_content and isinstance(part_content, str) and part_content.strip():
+                        content_parts.append(part_content)
+                elif part_kind == "system-prompt":
+                    # Skip system prompts in output - they're too verbose
+                    pass
                 elif part_kind == "tool-call":
                     # Tool call representation - only show if we have a meaningful name
-                    tool_name = part.get("name", "")
+                    tool_name = part.get("tool_name", "") or part.get("name", "")
                     if tool_name and tool_name != "unknown":
                         content_parts.append(f"[Tool Call: {tool_name}]")
-                elif part_kind == "tool-result":
-                    # Tool result representation
-                    content_parts.append(f"[Tool Result]\n{part_content}")
+                elif part_kind in ("tool-result", "tool-return"):
+                    # Tool result representation - skip for cleaner output
+                    pass
 
             content = "\n\n".join(content_parts) if content_parts else ""
 
-            # Map roles
-            if role == "user":
-                msg_role = MessageRole.USER
-            elif role == "assistant":
-                msg_role = MessageRole.ASSISTANT
-            elif role == "system":
-                msg_role = MessageRole.SYSTEM
-            else:
-                msg_role = MessageRole.ASSISTANT
+            # Skip messages with empty or whitespace-only content
+            if not content or not content.strip():
+                continue
 
-            # Get timestamp from message if available, fallback to file timestamp
-            timestamp_str = msg_data.get("timestamp")
-            if timestamp_str:
+            # Map kind to role
+            if msg_kind == "request":
+                msg_role = MessageRole.USER
+            elif msg_kind == "response":
+                msg_role = MessageRole.ASSISTANT
+            else:
+                msg_role = MessageRole.USER
+
+            # Get timestamp from parts or fallback to file timestamp
+            if latest_timestamp:
                 try:
-                    timestamp = datetime.fromisoformat(timestamp_str.replace("Z", "+00:00"))
+                    timestamp = datetime.fromisoformat(latest_timestamp.replace("Z", "+00:00"))
                 except (ValueError, AttributeError):
                     timestamp = updated_at
             else:
