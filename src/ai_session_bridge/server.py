@@ -57,7 +57,12 @@ async def list_tools() -> list[Tool]:
                 "properties": {
                     "workspace_path": {
                         "type": "string",
-                        "description": "Workspace path. Defaults to current working directory.",
+                        "description": "Workspace path. Defaults to current working directory. Ignored if all_workspaces is true.",
+                    },
+                    "all_workspaces": {
+                        "type": "boolean",
+                        "default": False,
+                        "description": "If true, list sessions from all workspaces instead of just the specified workspace.",
                     },
                     "tool_filter": {
                         "type": "array",
@@ -88,7 +93,15 @@ async def list_tools() -> list[Tool]:
                 "type": "object",
                 "properties": {
                     "query": {"type": "string", "description": "Search query"},
-                    "workspace_path": {"type": "string", "description": "Workspace path (optional)"},
+                    "workspace_path": {
+                        "type": "string",
+                        "description": "Workspace path. Defaults to current working directory. Ignored if all_workspaces is true.",
+                    },
+                    "all_workspaces": {
+                        "type": "boolean",
+                        "default": False,
+                        "description": "If true, search sessions from all workspaces instead of just the specified workspace.",
+                    },
                     "tool": {"type": "string", "description": "Filter by tool (optional)"},
                     "limit": {"type": "integer", "default": 20, "description": "Maximum results"},
                 },
@@ -101,7 +114,15 @@ async def list_tools() -> list[Tool]:
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "workspace_path": {"type": "string", "description": "Workspace path (optional)"},
+                    "workspace_path": {
+                        "type": "string",
+                        "description": "Workspace path. Defaults to current working directory. Ignored if all_workspaces is true.",
+                    },
+                    "all_workspaces": {
+                        "type": "boolean",
+                        "default": False,
+                        "description": "If true, get context from all workspaces instead of just the specified workspace.",
+                    },
                     "max_sessions": {"type": "integer", "default": 3, "description": "Max sessions to include"},
                     "max_messages": {"type": "integer", "default": 20, "description": "Max messages per session"},
                 },
@@ -129,8 +150,13 @@ async def call_tool(name: str, arguments: Any) -> list[TextContent]:
 
 async def _list_sessions_tool(args: dict) -> list[TextContent]:
     """Implement list_sessions tool."""
-    workspace_path = args.get("workspace_path") or get_current_workspace()
-    workspace_path = normalize_workspace_path(workspace_path)
+    all_workspaces = args.get("all_workspaces", False)
+
+    if all_workspaces:
+        workspace_path = None
+    else:
+        workspace_path = args.get("workspace_path") or get_current_workspace()
+        workspace_path = normalize_workspace_path(workspace_path)
 
     tool_filter = args.get("tool_filter", [])
     limit = args.get("limit", 10)
@@ -163,13 +189,14 @@ async def _list_sessions_tool(args: dict) -> list[TextContent]:
 
     # Format response
     result = {
-        "workspace": workspace_path,
+        "workspace": workspace_path if workspace_path else "all",
         "total_sessions": len(all_sessions),
         "sessions": [
             {
                 "id": s.id,
                 "tool": s.tool,
                 "title": s.title,
+                "workspace": s.workspace_path,
                 "message_count": s.message_count,
                 "created_at": s.created_at.isoformat(),
                 "updated_at": s.updated_at.isoformat(),
@@ -241,8 +268,12 @@ async def _get_session_tool(args: dict) -> list[TextContent]:
 async def _search_sessions_tool(args: dict) -> list[TextContent]:
     """Implement search_sessions tool."""
     query = args["query"]
-    workspace_path = args.get("workspace_path")
-    if workspace_path:
+    all_workspaces = args.get("all_workspaces", False)
+
+    if all_workspaces:
+        workspace_path = None
+    else:
+        workspace_path = args.get("workspace_path") or get_current_workspace()
         workspace_path = normalize_workspace_path(workspace_path)
 
     tool = args.get("tool")
@@ -282,8 +313,13 @@ async def _search_sessions_tool(args: dict) -> list[TextContent]:
 
 async def _get_recent_context_tool(args: dict) -> list[TextContent]:
     """Implement get_recent_context tool."""
-    workspace_path = args.get("workspace_path") or get_current_workspace()
-    workspace_path = normalize_workspace_path(workspace_path)
+    all_workspaces = args.get("all_workspaces", False)
+
+    if all_workspaces:
+        workspace_path = None
+    else:
+        workspace_path = args.get("workspace_path") or get_current_workspace()
+        workspace_path = normalize_workspace_path(workspace_path)
 
     max_sessions = args.get("max_sessions", _config.mcp.max_context_sessions)
     max_messages = args.get("max_messages", _config.mcp.max_context_messages)
@@ -345,7 +381,7 @@ async def _get_recent_context_tool(args: dict) -> list[TextContent]:
 
     # Format response
     result = {
-        "workspace": workspace_path,
+        "workspace": workspace_path if workspace_path else "all",
         "sessions_included": len(all_sessions),
         "total_messages": len(context_messages),
         "context": context_messages,

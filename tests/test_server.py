@@ -253,3 +253,64 @@ async def test_list_sessions_limit_param(mock_workspace_for_mcp):
 
     # Should respect limit
     assert len(data.get("sessions", [])) <= 1
+
+
+@pytest.mark.asyncio
+async def test_list_sessions_all_workspaces(mock_workspace_for_mcp):
+    """Test list_sessions with all_workspaces=True returns sessions from all workspaces."""
+    args = {
+        "all_workspaces": True,
+        "limit": 10,
+    }
+
+    result = await _list_sessions_tool(args)
+    assert len(result) > 0
+
+    content = result[0].text
+    data = json.loads(content)
+
+    # Should indicate all workspaces
+    assert data.get("workspace") == "all"
+    # Sessions should include workspace info
+    if data.get("sessions"):
+        assert "workspace" in data["sessions"][0]
+
+
+@pytest.mark.asyncio
+async def test_list_sessions_all_workspaces_ignores_workspace_path(mock_workspace_for_mcp, tmp_path):
+    """Test that all_workspaces=True ignores workspace_path parameter."""
+    # Create an empty workspace that would normally return no sessions
+    empty_workspace = tmp_path / "empty"
+    empty_workspace.mkdir()
+
+    args = {
+        "workspace_path": str(empty_workspace),  # This should be ignored
+        "all_workspaces": True,
+        "limit": 10,
+    }
+
+    result = await _list_sessions_tool(args)
+    content = result[0].text
+    data = json.loads(content)
+
+    # Should indicate all workspaces, not the empty workspace
+    assert data.get("workspace") == "all"
+
+
+@pytest.mark.asyncio
+async def test_get_recent_context_all_workspaces(mock_workspace_for_mcp):
+    """Test get_recent_context with all_workspaces=True."""
+    args = {
+        "all_workspaces": True,
+        "max_sessions": 3,
+        "max_messages": 10,
+    }
+
+    result = await _get_recent_context_tool(args)
+    assert len(result) > 0
+
+    content = result[0].text
+    data = json.loads(content)
+
+    # Should indicate all workspaces
+    assert data.get("workspace") == "all"
