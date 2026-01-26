@@ -100,9 +100,10 @@ def list_sessions(tool: tuple[str, ...], limit: int, all: bool) -> None:
     table.add_column("Tool", style="cyan")
     table.add_column("Title", style="yellow", overflow="fold")
     table.add_column("Session ID", style="green", no_wrap=True)
+    table.add_column("Workspace", style="white", overflow="fold")
     table.add_column("Messages", justify="right")
     table.add_column("Last Updated")
-    table.add_column("Preview", style="dim")
+    table.add_column("Preview", style="white")
 
     for session in all_sessions:
         # Replace line breaks with spaces for table display
@@ -112,6 +113,7 @@ def list_sessions(tool: tuple[str, ...], limit: int, all: bool) -> None:
             session.tool,
             title_text[:40] + "..." if len(title_text) > 40 else title_text,
             session.id,
+            session.workspace_path or "",
             str(session.message_count),
             session.updated_at.strftime("%Y-%m-%d %H:%M"),
             preview_text[:50] + "..." if len(preview_text) > 50 else preview_text,
@@ -122,54 +124,63 @@ def list_sessions(tool: tuple[str, ...], limit: int, all: bool) -> None:
 
 @main.command()
 @click.argument("session_id")
-@click.option("--tool", "-t", required=True, help="Tool name (copilot, cursor, rovodev, etc.)")
+@click.option("--tool", "-t", help="Tool name (copilot, cursor, rovodev). Auto-detected if not specified.")
 @click.option("--no-filter", is_flag=True, help="Disable content filtering")
-@click.option("--all", "-a", is_flag=True, help="Search across all workspaces (default: current workspace only)")
-def show(session_id: str, tool: str, no_filter: bool, all: bool) -> None:
+@click.option("--no-pager", is_flag=True, help="Disable pager (less-like) for long output")
+def show(session_id: str, tool: str | None, no_filter: bool, no_pager: bool) -> None:
     """Show details of a specific session."""
     config = load_config()
     registry = get_registry()
 
-    reader = registry.get_reader(tool)
-    if not reader:
-        console.print(f"[red]Error: Unknown tool '{tool}'[/red]")
+    # Search across all workspaces and tools to find the session
+    session_file = None
+    found_reader = None
+
+    if tool:
+        # Tool specified - only search that tool
+        tools_to_search = [tool]
+    else:
+        # Auto-detect - search all tools
+        tools_to_search = registry.list_tools()
+
+    for tool_name in tools_to_search:
+        reader = registry.get_reader(tool_name)
+        if not reader:
+            continue
+
+        # Search across all workspaces (workspace_path=None)
+        try:
+            found_file = reader.find_session_by_id(session_id, None)
+            if found_file:
+                session_file = found_file
+                found_reader = reader
+                break
+        except Exception:
+            continue
+
+    if not session_file or not found_reader:
+        console.print(f"[red]Error: Session '{session_id}' not found[/red]")
         sys.exit(1)
 
-    # Determine workspace: current workspace unless --all is specified
-    if all:
-        workspace_path = None
-    else:
-        workspace_path = get_current_workspace()
-
-    # Find session
+    # Read session
     try:
-        session_file = reader.find_session_by_id(session_id, workspace_path)
-        if not session_file:
-            if all:
-                console.print(f"[red]Error: Session '{session_id}' not found in any workspace[/red]")
-            else:
-                console.print(
-                    f"[red]Error: Session '{session_id}' not found in current workspace (try --all to search all workspaces)[/red]"
-                )
-            sys.exit(1)
-
-        # Read session
-        session = reader.read_session(session_file)
+        session = found_reader.read_session(session_file)
 
         # Apply filtering
         if not no_filter and config.filtering.enabled:
             content_filter = ContentFilter(config.filtering)
             session.messages = [content_filter.filter_message(msg) for msg in session.messages]
 
-        # Display session
-        console.print(f"\n[bold]Session:[/bold] {session.id}")
-        console.print(f"[bold]Tool:[/bold] {session.tool}")
-        console.print(f"[bold]Workspace:[/bold] {session.workspace_path}")
-        console.print(f"[bold]Created:[/bold] {session.created_at}")
-        console.print(f"[bold]Updated:[/bold] {session.updated_at}")
-        console.print(f"[bold]Messages:[/bold] {len(session.messages)}\n")
+        # Build output content
+        output_lines = []
+        output_lines.append(f"\n[bold]Session:[/bold] {session.id}")
+        output_lines.append(f"[bold]Tool:[/bold] {session.tool}")
+        output_lines.append(f"[bold]Workspace:[/bold] {session.workspace_path}")
+        output_lines.append(f"[bold]Created:[/bold] {session.created_at}")
+        output_lines.append(f"[bold]Updated:[/bold] {session.updated_at}")
+        output_lines.append(f"[bold]Messages:[/bold] {len(session.messages)}\n")
 
-        # Display messages
+        # Build messages content
         for i, msg in enumerate(session.messages, 1):
             role_color = {
                 "user": "blue",
@@ -178,9 +189,18 @@ def show(session_id: str, tool: str, no_filter: bool, all: bool) -> None:
                 "tool": "magenta",
             }.get(msg.role.value, "white")
 
-            console.print(f"[{role_color}]--- {msg.role.value.upper()} ({msg.timestamp}) ---[/{role_color}]")
-            console.print(msg.content)
-            console.print()
+            output_lines.append(f"[{role_color}]--- {msg.role.value.upper()} ({msg.timestamp}) ---[/{role_color}]")
+            output_lines.append(msg.content)
+            output_lines.append("")
+
+        output_text = "\n".join(output_lines)
+
+        # Use pager for large output unless disabled or not a TTY
+        if no_pager or not sys.stdout.isatty():
+            console.print(output_text)
+        else:
+            with console.pager(styles=True):
+                console.print(output_text)
 
     except Exception as e:
         console.print(f"[red]Error: {e}[/red]")
@@ -268,9 +288,10 @@ def search(query: str, tool: str | None, limit: int, all: bool) -> None:
         table.add_column("Tool", style="cyan")
         table.add_column("Title", style="yellow")
         table.add_column("Session ID", style="green", no_wrap=True)
+        table.add_column("Workspace", style="white", overflow="fold")
         table.add_column("Role")
         table.add_column("Timestamp")
-        table.add_column("Match", style="dim")
+        table.add_column("Match", style="white")
 
         for result in results:
             # Truncate content
@@ -290,6 +311,7 @@ def search(query: str, tool: str | None, limit: int, all: bool) -> None:
                 result.tool,
                 title_text,
                 result.session_id,
+                result.workspace_path or "",
                 result.role,
                 result.timestamp.strftime("%Y-%m-%d %H:%M"),
                 content,
