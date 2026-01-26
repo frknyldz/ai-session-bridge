@@ -137,7 +137,10 @@ class CursorReader(SessionReader):
         actual_workspace_path = None
         if workspace_path:
             workspace_composer_ids, actual_workspace_path = self._get_workspace_composer_ids(workspace_path)
-            if workspace_composer_ids is not None and len(workspace_composer_ids) == 0:
+            if workspace_composer_ids is None:
+                # Workspace not found in Cursor - no sessions for this workspace
+                return summaries
+            if len(workspace_composer_ids) == 0:
                 # Workspace found but has no composers
                 return summaries
 
