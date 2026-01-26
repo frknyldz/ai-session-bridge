@@ -141,6 +141,11 @@ class CursorReader(SessionReader):
                 # Workspace found but has no composers
                 return summaries
 
+        # Build a reverse mapping: composer_id -> workspace_path (for --all mode)
+        composer_to_workspace = {}
+        if workspace_path is None:
+            composer_to_workspace = self._build_composer_workspace_map()
+
         try:
             conn = sqlite3.connect(global_db)
             # Query composerData entries
@@ -207,8 +212,13 @@ class CursorReader(SessionReader):
                     created_at = datetime.fromtimestamp(data.get("createdAt", stat.st_ctime) / 1000)
                     last_updated = datetime.fromtimestamp(data.get("lastUpdatedAt", stat.st_mtime) / 1000)
 
-                    # Use actual workspace path if we found one, otherwise mark as global
-                    ws_path = actual_workspace_path if actual_workspace_path else "cursor-composer-global"
+                    # Determine workspace path
+                    if actual_workspace_path:
+                        ws_path = actual_workspace_path
+                    elif composer_id in composer_to_workspace:
+                        ws_path = composer_to_workspace[composer_id]
+                    else:
+                        ws_path = "(global)"
 
                     summaries.append(
                         SessionSummary(
@@ -231,6 +241,51 @@ class CursorReader(SessionReader):
             pass
 
         return summaries
+
+    def _build_composer_workspace_map(self) -> dict[str, str]:
+        """Build a mapping from composer_id to workspace_path for all workspaces."""
+        from urllib.parse import unquote, urlparse
+
+        composer_to_workspace = {}
+
+        for ws_dir in self.storage_dir.iterdir():
+            if not ws_dir.is_dir():
+                continue
+
+            workspace_json = ws_dir / "workspace.json"
+            if not workspace_json.exists():
+                continue
+
+            try:
+                with open(workspace_json) as f:
+                    ws_data = json.load(f)
+
+                folder_uri = ws_data.get("folder", "")
+                if folder_uri:
+                    parsed = urlparse(folder_uri)
+                    if parsed.scheme == "file":
+                        ws_folder = unquote(parsed.path)
+
+                        # Get composer IDs for this workspace
+                        state_db = ws_dir / "state.vscdb"
+                        if state_db.exists():
+                            conn = sqlite3.connect(state_db)
+                            cursor = conn.execute("SELECT value FROM ItemTable WHERE key = 'composer.composerData'")
+                            row = cursor.fetchone()
+                            conn.close()
+
+                            if row:
+                                composer_data = json.loads(row[0])
+                                all_composers = composer_data.get("allComposers", [])
+                                for composer in all_composers:
+                                    if isinstance(composer, dict):
+                                        cid = composer.get("composerId")
+                                        if cid:
+                                            composer_to_workspace[cid] = ws_folder
+            except Exception:
+                continue
+
+        return composer_to_workspace
 
     def _get_workspace_composer_ids(self, workspace_path: str) -> tuple[set[str] | None, str | None]:
         """Get the set of composer IDs associated with a workspace.
